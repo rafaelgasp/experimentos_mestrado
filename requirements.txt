@@ -1,0 +1,7 @@
+tqdm
+pandas
+numpy
+sklearn
+scipy
+seaborn
+xml
