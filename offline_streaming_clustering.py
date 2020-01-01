@@ -1,4 +1,4 @@
-from sklearn.metrics import silhouette_score, davies_bouldin_score
+from sklearn.metrics import silhouette_score, davies_bouldin_score, mean_squared_error
 from scipy.spatial import distance
 from scipy.stats import skew
 import pandas as pd
@@ -36,9 +36,6 @@ def get_centroids_metrics(X, y_pred, centroids):
         ---------
             dict
     """
-    # Contagem de dados por labels preditas
-    values, counts = np.unique(y_pred, return_counts=True)
-
     r = {
         "radius_list": [],
         "dist_intra_cluster_list": [],
@@ -104,8 +101,26 @@ def get_individuals(resp_1, resp_2, key, k="equal"):
 
     return r
 
+def get_mean_squared(centroids_1, centroids_2, cols=None):
+    """
+        Calculates Mean Squared Error (MSE) to compare clusterings 1 and 2
+    """
+    if cols is None:
+        cols = list(range(centroids_1.shape[1]))
+        
+    mse = np.mean((centroids_1 - centroids_2) ** 2, axis=0)
+    
+    resp = {
+        "MSE__" + str(cols[i]): mse[i] for i in range(len(cols))
+    }
+    resp.update({
+        "total_MSE": np.sum(mse),
+        "avg_MSE": np.mean(mse),
+        "count_non_zero_MSE": np.count_nonzero(mse)        
+    })
+    return resp
 
-def compare_clusterings(resp_1, resp_2):
+def compare_clusterings(resp_1, resp_2, cols=None):
     """
         Compara dois agrupamentos em duas janelas diferentes e
         retorna métricas das variações 
@@ -115,15 +130,6 @@ def compare_clusterings(resp_1, resp_2):
     # se não houve centroides encontrados nos dois grupos, retorna vazio
     if len(resp_1["centroids"]) == 0 or len(resp_2["centroids"]) == 0:
         return r
-
-    ordem = distance.cdist(resp_1["centroids"], resp_2["centroids"])
-
-    if len(ordem) == 0:
-        return r
-
-    # Calcula a ordem dos clusters_1 em relação aos clusters_2
-    # baseado nas menores distancias para correspondência
-    ordem = ordem.argmin(axis=0)
 
     for key in resp_1:
         try:
@@ -135,12 +141,13 @@ def compare_clusterings(resp_1, resp_2):
                 # ---------------
                 # Calcula a menor distância média interclusters os clusters
                 if key == "centroids":
-                    # Reordena os valores do cluster_1 para correspondência
-                    resp_2[key] = resp_2[key][ordem]
-
                     r["diff_" + key_] = min(
                         distance.cdist(resp_1[key], resp_2[key]).min(axis=0).mean(),
                         distance.cdist(resp_2[key], resp_1[key]).min(axis=0).mean(),
+                    )
+
+                    r.update(
+                        get_mean_squared(resp_1[key], resp_2[key], cols)
                     )
 
                 # -------------------------
@@ -152,7 +159,7 @@ def compare_clusterings(resp_1, resp_2):
                 # Para métricas baseadas em lista, calcula a diferença média
                 elif isinstance(resp_1[key], list):
                     # Reordena os valores do cluster_1 para correspondência
-                    resp_1[key] = np.array(resp_1[key])[ordem].tolist()
+                    # resp_1[key] = np.array(resp_1[key][ordem]).tolist()
                     
                     r["diff_" + key_] = (
                         np.array(resp_2[key]) - np.array(resp_1[key])
@@ -252,8 +259,6 @@ def run_offline_clustering_window(
             run_df, measures_df
     """
     resp = []
-    old_model = None
-    old_centroids = None
     # old_X = None
 
     if sliding_window:
@@ -328,8 +333,6 @@ def run_offline_clustering_window(
 
         # Adiciona iteração atual na resposta
         resp.append(r)
-
-        old_centroids = r["centroids"]
 
     run_df = pd.DataFrame(resp).set_index("i")
 
