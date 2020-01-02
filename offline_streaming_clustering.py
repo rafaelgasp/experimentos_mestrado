@@ -102,20 +102,30 @@ def get_individuals(resp_1, resp_2, key, k="equal"):
     return r
 
 def get_mean_squared(centroids_1, centroids_2, cols=None):
-    """
-        Calculates Mean Squared Error (MSE) to compare clusterings 1 and 2
-    """
     if cols is None:
         cols = list(range(centroids_1.shape[1]))
         
     mse = np.mean((centroids_1 - centroids_2) ** 2, axis=0)
+    sse = np.sum((centroids_1 - centroids_2) ** 2, axis=0)
     
     resp = {
         "MSE__" + str(cols[i]): mse[i] for i in range(len(cols))
     }
     resp.update({
+        "SSE__" + str(cols[i]): sse[i] for i in range(len(cols))
+    })    
+    
+    centroids_mse = np.mean((centroids_1 - centroids_2) ** 2, axis=1)
+    centroids_sse = np.sum((centroids_1 - centroids_2) ** 2, axis=1)
+    for i in range(len(centroids_mse)):
+        resp["centroid_" + str(i) + "_MSE"] = centroids_mse[i]
+        resp["centroid_" + str(i) + "_SSE"] = centroids_sse[i]
+    
+    resp.update({
         "total_MSE": np.sum(mse),
         "avg_MSE": np.mean(mse),
+        "total_SSE": np.sum(sse),
+        "avg_SSE": np.mean(sse),
         "count_non_zero_MSE": np.count_nonzero(mse)        
     })
     return resp
