@@ -101,34 +101,54 @@ def get_individuals(resp_1, resp_2, key, k="equal"):
 
     return r
 
-def get_mean_squared(centroids_1, centroids_2, cols=None):
+def get_mean_squared_error(centroids_1, centroids_2, cols=None):
     if cols is None:
         cols = list(range(centroids_1.shape[1]))
         
     mse = np.mean((centroids_1 - centroids_2) ** 2, axis=0)
-    sse = np.sum((centroids_1 - centroids_2) ** 2, axis=0)
+    # sse = np.sum((centroids_1 - centroids_2) ** 2, axis=0)
     
     resp = {
         "MSE__" + str(cols[i]): mse[i] for i in range(len(cols))
     }
-    resp.update({
-        "SSE__" + str(cols[i]): sse[i] for i in range(len(cols))
-    })    
+    # resp.update({
+    #     "SSE__" + str(cols[i]): sse[i] for i in range(len(cols))
+    # })    
     
     centroids_mse = np.mean((centroids_1 - centroids_2) ** 2, axis=1)
-    centroids_sse = np.sum((centroids_1 - centroids_2) ** 2, axis=1)
+    # centroids_sse = np.sum((centroids_1 - centroids_2) ** 2, axis=1)
     for i in range(len(centroids_mse)):
         resp["centroid_" + str(i) + "_MSE"] = centroids_mse[i]
-        resp["centroid_" + str(i) + "_SSE"] = centroids_sse[i]
+        # resp["centroid_" + str(i) + "_SSE"] = centroids_sse[i]
     
     resp.update({
         "total_MSE": np.sum(mse),
         "avg_MSE": np.mean(mse),
-        "total_SSE": np.sum(sse),
-        "avg_SSE": np.mean(sse),
+        # "total_SSE": np.sum(sse),
+        # "avg_SSE": np.mean(sse),
         "count_non_zero_MSE": np.count_nonzero(mse)        
     })
     return resp
+
+
+def get_individual_dimensions(centroids, cols=None):
+    if cols is None:
+        cols = list(range(centroids.shape[1]))
+    
+    r = {}
+    
+    for i in range(len(centroids)):
+        for j in range(len(centroids[i])):
+            r.update({
+                "DIM__" + str(cols[j]) + "_centroid_" + str(i): centroids[i][j]
+            })
+    avgs = centroids.mean(axis=0)
+    for i in range(len(avgs)):
+        r.update({
+            "DIM__" + str(cols[i]) + "_avg": avgs[i]
+        })
+
+    return r
 
 def compare_clusterings(resp_1, resp_2, cols=None):
     """
@@ -157,7 +177,7 @@ def compare_clusterings(resp_1, resp_2, cols=None):
                     )
 
                     r.update(
-                        get_mean_squared(resp_1[key], resp_2[key], cols)
+                        get_mean_squared_error(resp_1[key], resp_2[key], cols)
                     )
 
                 # -------------------------
@@ -223,33 +243,6 @@ def compare_clusterings(resp_1, resp_2, cols=None):
 
     return r
 
-def cluster_overlap(cluster_X, cluster_Y):
-    """
-    Calculates the overlap between two clusters, i.e. how much one 
-    matches another
-
-    Args:
-        cluster_X (np.array): List of data points in the cluster
-        cluster_Y (np.array): List of data points in the cluster
-    
-    Returns:
-        (float) The overlap between the two clusters (0-1)
-    """
-    overlap_sum = 0
-    X_sum = 0
-
-    if len(cluster_X) == 0 or len(cluster_Y) == 0:
-        return 0
-
-    for i in range(len(cluster_X)):
-        # print(cluster_X[i], cluster_Y, np.in1d(cluster_X[i], cluster_Y).all())
-        if np.in1d(cluster_X[i], cluster_Y).all():
-            overlap_sum += 1
-            # overlap_sum += 1
-        X_sum += 1
-
-    return overlap_sum/X_sum
-
 def run_offline_clustering_window(
     model, window, df, sliding_window=False, sliding_step=50, 
 ):
@@ -288,14 +281,30 @@ def run_offline_clustering_window(
         # model.fit(X)
         # y_pred = model.labels_
         y_pred = model.fit_predict(X)
+        
+        centers =  (
+            pd.DataFrame(X)
+            .groupby(y_pred)
+            .mean()
+            .drop(-1, errors="ignore")
+            .values
+        )
 
         # Faz uma lookup table para reorganizar a ordem das labels
         # dos clusters
-        idx = np.argsort(model.cluster_centers_.sum(axis=1))
+        idx = np.argsort(centers.sum(axis=1))
         lut = np.zeros_like(idx)
         lut[idx] = np.arange(len(idx))
         
         y_pred = lut[y_pred]
+        
+        centers =  (
+            pd.DataFrame(X)
+            .groupby(y_pred)
+            .mean()
+            .drop(-1, errors="ignore")
+            .values
+        )
         
         #print(i)
         #print("Y_PRED", y_pred)
@@ -323,22 +332,19 @@ def run_offline_clustering_window(
         if max(counts) >= 2 and len(values) > 1:
             r.update(get_validation_indexes(X, y_pred))
 
-        old_model = deepcopy(model)
-        # old_X = X.copy()
-
-        r["centroids"] = (
-            pd.DataFrame(X)
-            .groupby(y_pred)
-            .mean()
-            .drop(-1, errors="ignore")
-            .values
-        )
+        r["centroids"] = centers
+        r.update(get_individual_dimensions(centers, cols=df.columns))
 
         #if old_centroids is not None:
         #    ordem = distance.cdist(old_centroids, r["centroids"]).argmin(axis=1)
         #    r["centroids"] = r["centroids"][ordem]
 
+        
         r["avg_dist_between_centroids"] = distance.pdist(r["centroids"]).mean()
+        
+        for i in range(len(centers)):
+            for j in range(i + 1, len(centers)):
+                r["dist_between_" + str(i) + "_" + str(j)] = distance.euclidean(centers[i], centers[j])
         r.update(get_centroids_metrics(X, y_pred, r["centroids"]))
 
         # Adiciona iteração atual na resposta
@@ -369,7 +375,7 @@ def run_offline_clustering_window(
             print(e)
             pass
 
-    measures = [compare_clusterings(resp[i], resp[i + 1]) for i in range(len(resp) - 1)]
+    measures = [compare_clusterings(resp[i], resp[i + 1], df.columns) for i in range(len(resp) - 1)]
     measures_df = pd.DataFrame(measures).set_index("i")
     measures_df.fillna(0, inplace=True)
 
