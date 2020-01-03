@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import scipy
-
+import scipy.stats
 
 def get_metrics(drifts, resp, window_size=100, verbose=False):
     """
