@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from sklearn.metrics import silhouette_score, davies_bouldin_score, mean_squared_error
 from scipy.spatial import distance
 from scipy.stats import skew
@@ -52,22 +53,22 @@ def get_centroids_metrics(X, y_pred, centroids):
             # Maximum distance of a point to centroid
             r["radius_list"].append(distance.cdist(X_in_cluster, [centroids[j]]).max())
         except ValueError:
-            r["radius_list"].append([0 for _ in range(len(centroids))])
+            r["radius_list"].append(0)
 
         # Average intra-cluster distances
         dist_intra = distance.pdist(X_in_cluster).mean()
         r["dist_intra_cluster_list"].append(dist_intra)
-        r["dist_intra_cluster_i=" + str(j)] = dist_intra
+        # r["dist_intra_cluster_i=" + str(j)] = dist_intra
 
         # Skewness of cluster
         skewness = skew(X_in_cluster, axis=None)
         r["skewness_list"].append(skewness)
-        r["skewness_i=" + str(j)] = skewness
+        # r["skewness_i=" + str(j)] = skewness
 
         # Std of cluster
         c_std = X_in_cluster.std()
         r["cluster_std_list"].append(c_std)
-        r["cluster_std_i=" + str(j)] = c_std
+        # r["cluster_std_i=" + str(j)] = c_std
     return r
 
 
@@ -105,29 +106,32 @@ def get_mean_squared_error(centroids_1, centroids_2, cols=None):
     if cols is None:
         cols = list(range(centroids_1.shape[1]))
         
-    mse = np.mean((centroids_1 - centroids_2) ** 2, axis=0)
-    # sse = np.sum((centroids_1 - centroids_2) ** 2, axis=0)
-    
-    resp = {
-        "MSE__" + str(cols[i]): mse[i] for i in range(len(cols))
-    }
-    # resp.update({
-    #     "SSE__" + str(cols[i]): sse[i] for i in range(len(cols))
-    # })    
-    
-    centroids_mse = np.mean((centroids_1 - centroids_2) ** 2, axis=1)
-    # centroids_sse = np.sum((centroids_1 - centroids_2) ** 2, axis=1)
-    for i in range(len(centroids_mse)):
-        resp["centroid_" + str(i) + "_MSE"] = centroids_mse[i]
-        # resp["centroid_" + str(i) + "_SSE"] = centroids_sse[i]
-    
-    resp.update({
-        "total_MSE": np.sum(mse),
-        "avg_MSE": np.mean(mse),
-        # "total_SSE": np.sum(sse),
-        # "avg_SSE": np.mean(sse),
-        "count_non_zero_MSE": np.count_nonzero(mse)        
-    })
+    try:
+        mse = np.mean((centroids_1 - centroids_2) ** 2, axis=0)
+        # sse = np.sum((centroids_1 - centroids_2) ** 2, axis=0)
+
+        #resp = {
+        #    "MSE__" + str(cols[i]): mse[i] for i in range(len(cols))
+        #}
+        # resp.update({
+        #     "SSE__" + str(cols[i]): sse[i] for i in range(len(cols))
+        # })    
+
+        # centroids_mse = np.mean((centroids_1 - centroids_2) ** 2, axis=1)
+        # centroids_sse = np.sum((centroids_1 - centroids_2) ** 2, axis=1)
+        # for i in range(len(centroids_mse)):
+        #    resp["centroid_" + str(i) + "_MSE"] = centroids_mse[i]
+        #    resp["centroid_" + str(i) + "_SSE"] = centroids_sse[i]
+
+        resp = {
+            "total_MSE": np.sum(mse),
+            "avg_MSE": np.mean(mse),
+            # "total_SSE": np.sum(sse),
+            # "avg_SSE": np.mean(sse),
+            "count_non_zero_MSE": np.count_nonzero(mse)        
+        }
+    except:
+        return {}
     return resp
 
 
@@ -175,6 +179,11 @@ def compare_clusterings(resp_1, resp_2, cols=None):
                         distance.cdist(resp_1[key], resp_2[key]).min(axis=0).mean(),
                         distance.cdist(resp_2[key], resp_1[key]).min(axis=0).mean(),
                     )
+                    
+                    r["std_" + key_] = min(
+                        distance.cdist(resp_1[key], resp_2[key]).min(axis=0).std(),
+                        distance.cdist(resp_2[key], resp_1[key]).min(axis=0).std(),
+                    )
 
                     r.update(
                         get_mean_squared_error(resp_1[key], resp_2[key], cols)
@@ -191,12 +200,15 @@ def compare_clusterings(resp_1, resp_2, cols=None):
                     # Reordena os valores do cluster_1 para correspondência
                     # resp_1[key] = np.array(resp_1[key][ordem]).tolist()
                     
-                    r["diff_" + key_] = (
-                        np.array(resp_2[key]) - np.array(resp_1[key])
-                    ).mean()
+                    try:
+                        r["diff_" + key_] = (
+                            (np.array(resp_2[key]) - np.array(resp_1[key])) ** 2
+                        ).mean()
+                    except ValueError:
+                        pass
 
                     # Metricas individuais por cluster
-                    r.update(get_individuals(resp_1, resp_2, key))
+                    # r.update(get_individuals(resp_1, resp_2, key))
 
 
                 # ------------
@@ -221,7 +233,7 @@ def compare_clusterings(resp_1, resp_2, cols=None):
                     )
 
                     # Metricas individuais por cluster
-                    r.update(get_individuals(resp_1, resp_2, key))
+                    # r.update(get_individuals(resp_1, resp_2, key))
                 else:
                 # -----------------
                 # diff_DBi
@@ -239,7 +251,7 @@ def compare_clusterings(resp_1, resp_2, cols=None):
         except Exception as e:
             print(key)
             print(resp_1[key])
-            # raise
+            raise
 
     return r
 
@@ -289,14 +301,16 @@ def run_offline_clustering_window(
             .drop(-1, errors="ignore")
             .values
         )
-
         # Faz uma lookup table para reorganizar a ordem das labels
         # dos clusters
         idx = np.argsort(centers.sum(axis=1))
         lut = np.zeros_like(idx)
         lut[idx] = np.arange(len(idx))
         
-        y_pred = lut[y_pred]
+        try:
+            y_pred = lut[y_pred]
+        except:
+            pass
         
         centers =  (
             pd.DataFrame(X)
@@ -333,18 +347,22 @@ def run_offline_clustering_window(
             r.update(get_validation_indexes(X, y_pred))
 
         r["centroids"] = centers
-        r.update(get_individual_dimensions(centers, cols=df.columns))
+        # r.update(get_individual_dimensions(centers, cols=df.columns))
 
-        #if old_centroids is not None:
+        # if old_centroids is not None:
         #    ordem = distance.cdist(old_centroids, r["centroids"]).argmin(axis=1)
         #    r["centroids"] = r["centroids"][ordem]
 
         
         r["avg_dist_between_centroids"] = distance.pdist(r["centroids"]).mean()
+        r["std_dist_between_centroids"] = distance.pdist(r["centroids"]).std()
+        r["min_dist_between_centroids"] = distance.pdist(r["centroids"]).min()
+        r["max_dist_between_centroids"] = distance.pdist(r["centroids"]).max()
         
-        for i in range(len(centers)):
-            for j in range(i + 1, len(centers)):
-                r["dist_between_" + str(i) + "_" + str(j)] = distance.euclidean(centers[i], centers[j])
+        #for i in range(len(centers)):
+        #    for j in range(i + 1, len(centers)):
+        #        r["dist_between_" + str(i) + "_" + str(j)] = distance.euclidean(centers[i], centers[j])
+        
         r.update(get_centroids_metrics(X, y_pred, r["centroids"]))
 
         # Adiciona iteração atual na resposta
@@ -363,14 +381,16 @@ def run_offline_clustering_window(
         min_individuals = run_df[col].apply(len).max()
 
         try:
-            for i in range(min_individuals):
-                run_df[col.replace("_list", "") + "_i=" + str(i)] = run_df[col].apply(
-                    lambda x: x[i] if i < len(x) else np.nan
-                )
+            #for i in range(min_individuals):
+            #    run_df[col.replace("_list", "") + "_i=" + str(i)] = run_df[col].apply(
+            #        lambda x: x[i] if i < len(x) else np.nan
+            #    )
 
             # Create avegares
             if col != "volume_list":
-                run_df[col.replace("_list", "")] = run_df[col].apply(lambda x: np.mean(x))
+                run_df["avg_" + col.replace("_list", "")] = run_df[col].apply(lambda x: np.mean(x))
+                run_df["std_" + col.replace("_list", "")] = run_df[col].apply(lambda x: np.std(x))
+                
         except Exception as e:
             print(e)
             pass

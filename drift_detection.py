@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -215,6 +216,16 @@ def detect_concept_drift(df, var_ref, rolling_window=5, std_tolerance=3, verbose
     return drifts, {"lowers": lowers, "uppers": uppers, "means": means}
 
 
+def exp_mw_avg_std(value, a):
+    mrt_array = np.array(value)
+    M = len(mrt_array)
+    weights = (1-a)**np.arange(M-1, -1, -1) # This is reverse order to match Series order
+    ewma = sum(weights * mrt_array) / sum(weights)
+    bias = sum(weights)**2 / (sum(weights)**2 - sum(weights**2))
+    ewmvar = bias * sum(weights * (mrt_array - ewma)**2) / sum(weights)
+    ewmstd = np.sqrt(ewmvar)
+    return ewma, ewmstd
+
 def cumulative_detect_concept_drift(
     df, var_ref, min_buffer=2, std_tolerance=3, smoothing_factor=0.5, verbose=False
 ):
@@ -251,18 +262,21 @@ def cumulative_detect_concept_drift(
         if len(window_buffer) >= min_buffer:
             # mean = np.mean(window_buffer)
             # std = np.std(window_buffer)
-            mean = (
-                pd.Series(window_buffer)
-                .ewm(alpha=smoothing_factor, adjust=True)
-                .mean()
-                .values[-1]
+            #mean = (
+            #    pd.Series(window_buffer)
+            #    .ewm(alpha=smoothing_factor, adjust=True)
+            #    .mean()
+            #    .values[-1]
+            #)
+            mean, std = exp_mw_avg_std(
+                window_buffer, smoothing_factor
             )
-            std = (
-                pd.Series(window_buffer)
-                .ewm(alpha=smoothing_factor, adjust=True)
-                .std()
-                .values[-1]
-            )
+            #std = (
+            #    pd.Series(window_buffer)
+            #    .ewm(alpha=smoothing_factor, adjust=True)
+            #    .std()
+            #    .values[-1]
+            #)
             means.append(mean)
         else:
             means.append(np.nan)
@@ -309,18 +323,23 @@ def exponential_smooth_detect_concept_drift(
             # mean = model.forecast(1)[0]
             # std = np.std(model.fittedvalues)
 
-            mean = (
-                pd.Series(window_buffer)
-                .ewm(alpha=smoothing_factor, adjust=True)
-                .mean()
-                .values[-1]
+            #mean = (
+            #    pd.Series(window_buffer)
+            #    .ewm(alpha=smoothing_factor, adjust=True)
+            #    .mean()
+            #    .values[-1]
+            #)
+            #std = (
+            #    pd.Series(window_buffer)
+            #    .ewm(alpha=smoothing_factor, adjust=True)
+            #    .std()
+            #    .values[-1]
+            #)
+            
+            mean, std = exp_mw_avg_std(
+                window_buffer, smoothing_factor
             )
-            std = (
-                pd.Series(window_buffer)
-                .ewm(alpha=smoothing_factor, adjust=True)
-                .std()
-                .values[-1]
-            )
+            
             means.append(mean)
         else:
             means.append(np.nan)
