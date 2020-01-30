@@ -353,11 +353,13 @@ def run_offline_clustering_window(
         #    ordem = distance.cdist(old_centroids, r["centroids"]).argmin(axis=1)
         #    r["centroids"] = r["centroids"][ordem]
 
-        
-        r["avg_dist_between_centroids"] = distance.pdist(r["centroids"]).mean()
-        r["std_dist_between_centroids"] = distance.pdist(r["centroids"]).std()
-        r["min_dist_between_centroids"] = distance.pdist(r["centroids"]).min()
-        r["max_dist_between_centroids"] = distance.pdist(r["centroids"]).max()
+        inter_dist = distance.pdist(r["centroids"])
+        r["sum_dist_between_centroids"] = inter_dist.sum()
+        r["avg_dist_between_centroids"] = inter_dist.mean()
+        r["std_dist_between_centroids"] = inter_dist.std()
+        r["min_dist_between_centroids"] = inter_dist.min()
+        r["max_dist_between_centroids"] = inter_dist.max()
+        r["amplitude_dist_between_centroids"] = r["max_dist_between_centroids"] - r["min_dist_between_centroids"]
         
         #for i in range(len(centers)):
         #    for j in range(i + 1, len(centers)):
